@@ -1,0 +1,294 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id                     String                  @id @default(cuid())
+  username               String                  @unique
+  password               String?
+  role                   Role                    @default(User)
+  lastLogin              DateTime?
+  signature              String?
+  itemRequests           ItemRequest[]
+  createdPurchaseOrders  PurchaseOrder[]         @relation("CreatedByStaff")
+  RequestPurchase        RequestPurchase[]
+  poApprovals            POApproval[]
+  createdDeliveryOrders  DeliveryOrder[]         @relation("CreatedByUser")
+  deliveryOrderApprovals DeliveryOrderApproval[]
+}
+
+model RequestPurchase {
+  id            String                @id @default(cuid())
+  requestCode   String                @unique
+  userId        String
+  locationId    String
+  createdAt     DateTime              @default(now())
+  createdBy     String
+  requestStatus RequestPurchaseStatus @default(PENDING)
+  remarks       String? 
+  itemRequests  ItemRequest[]
+  user          User                  @relation(fields: [userId], references: [id])
+  location      Location              @relation(fields: [locationId], references: [idLocation])
+  purchaseOrders PurchaseOrder[]      
+  DeliveryOrder DeliveryOrder[]
+}
+
+model ItemRequest {
+  id                     String              @id @default(cuid())
+  itemRequestName        String
+  itemRequestAmount      Int
+  itemRequestUseDuration String
+  itemRequestStatus      ItemRequestStatus   @default(PENDING)
+  requestPurchaseId      String
+  requestPurchase        RequestPurchase     @relation(fields: [requestPurchaseId], references: [id])
+  purchaseOrderItems     PurchaseOrderItem[]
+  User                   User?               @relation(fields: [userId], references: [id])
+  userId                 String?
+}
+
+model PurchaseOrder {
+  idPurchaseOrder     String               @id @default(cuid())
+  purchaseOrderNumber String               @unique
+  purchaseOrderRemark String?
+  requestPurchases    RequestPurchase[]    
+  createdById         String
+  createdBy           User                 @relation("CreatedByStaff", fields: [createdById], references: [id])
+  approvals           POApproval[]
+  status              PurchaseOrderStatus  @default(PENDING)
+  createdAt           DateTime             @default(now())
+  totalAmount         String
+  incomingGoodReceipt IncomingGoodReceipt?
+  purchaseOrderItems  PurchaseOrderItem[]
+}
+
+
+model POApproval {
+  id              String        @id @default(cuid())
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [idPurchaseOrder])
+  purchaseOrderId String
+  approvedBy      User          @relation(fields: [approvedById], references: [id])
+  approvedById    String
+  approvedAt      DateTime      @default(now())
+  signature       String
+
+  @@unique([purchaseOrderId, approvedById])
+}
+
+model PurchaseOrderItem {
+  idPurchaseOrderItem String        @id @default(cuid())
+  purchaseOrderId     String
+  purchaseOrder       PurchaseOrder @relation(fields: [purchaseOrderId], references: [idPurchaseOrder])
+  itemRequestId       String?       @unique
+  itemRequest         ItemRequest?  @relation(fields: [itemRequestId], references: [id])
+  itemName            String
+  itemCode            String
+  quantity            Int
+  unitPrice           String
+  totalPrice          String
+  supplierName        String
+  supplierTotal       String
+  consignTo           String?      
+}
+
+
+model IncomingGoodReceipt {
+  id              String        @id @default(cuid())
+  igrNumber       String        @unique
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [idPurchaseOrder])
+  purchaseOrderId String        @unique
+  remarks         String?
+  createdAt       DateTime      @default(now())
+  status          IGRStatus     @default(PENDING)
+  items           IGRItem[]
+  approvedBy      String?
+  approvedAt      DateTime?
+
+  itemsHistory    ItemHistory[]
+}
+
+model IGRItem {
+  id                  String              @id @default(cuid())
+  incomingGoodReceipt IncomingGoodReceipt @relation(fields: [igrId], references: [id])
+  igrId               String
+  itemName            String
+  itemCode            String
+  quantity            Int
+  isReceived          Boolean             @default(false)
+  warehouse           Warehouse?          @relation(fields: [warehouseId], references: [idWarehouse])
+  warehouseId         String?
+}
+
+model DeliveryOrder {
+  id              String                  @id @default(cuid())
+  doNumber        String                  @unique
+  requestPurchase RequestPurchase?        @relation(fields: [requestCode], references: [requestCode])
+  requestCode     String?
+  remarks         String?
+  status          DeliveryStatus          @default(PENDING)
+  createdAt       DateTime                @default(now())
+  createdBy       User                    @relation("CreatedByUser", fields: [userId], references: [id])
+  userId          String
+  items           DeliveryOrderItem[]
+  approvals       DeliveryOrderApproval[]
+  itemsHistory    ItemHistory[]
+}
+
+model DeliveryOrderItem {
+  id              String        @id @default(cuid())
+  deliveryOrder   DeliveryOrder @relation(fields: [deliveryOrderId], references: [id])
+  deliveryOrderId String
+  itemName        String
+  itemCode        String
+  quantity        Int
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [idWarehouse])
+  warehouseId     String
+
+  @@unique([deliveryOrderId, itemCode, warehouseId])
+}
+
+model DeliveryOrderApproval {
+  id              String        @id @default(cuid())
+  deliveryOrder   DeliveryOrder @relation(fields: [deliveryOrderId], references: [id])
+  deliveryOrderId String
+  approvedBy      User          @relation(fields: [approvedById], references: [id])
+  approvedById    String
+  approvedAt      DateTime      @default(now())
+  signature       String
+
+  @@unique([deliveryOrderId, approvedById])
+}
+
+model Supplier {
+  idSupplier      String         @id @default(cuid())
+  supplierName    String         @unique
+  supplierPhone   String?
+  supplierAddress String?
+  supplierItems   SupplierItem[]
+}
+
+model SupplierItem {
+  idSupplierItem String   @id @default(cuid())
+  supplier       Supplier @relation(fields: [supplierId], references: [idSupplier])
+  supplierId     String
+  item           Item     @relation(fields: [itemId], references: [idItem])
+  itemId         String
+
+  @@unique([supplierId, itemId])
+}
+
+model Warehouse {
+  idWarehouse          String               @id @default(cuid())
+  warehouseName        String               @unique
+  warehouseAddress     String
+  warehouseContact     String
+  warehouseInventories WarehouseInventory[]
+  IGRItem              IGRItem[]
+  deliveryOrderItems   DeliveryOrderItem[]
+  itemsHistory         ItemHistory[]
+}
+
+model Item {
+  idItem               String               @id @default(cuid())
+  itemName             String
+  itemCode             String
+  supplierItems        SupplierItem[]
+  warehouseInventories WarehouseInventory[]
+  itemsHistory         ItemHistory[]
+}
+
+model WarehouseInventory {
+  id              String    @id @default(cuid())
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [idWarehouse])
+  warehouseId     String
+  item            Item      @relation(fields: [itemId], references: [idItem])
+  itemId          String
+  stockQuantity   Int       @default(0)
+  itemShelfNumber String?
+  itemShelfBlock  String?
+
+  @@unique([warehouseId, itemId])
+}
+
+model Location {
+  idLocation      String            @id @default(cuid())
+  locationName    String
+  locationCode    String
+  RequestPurchase RequestPurchase[]
+  itemsHistory    ItemHistory[]
+}
+
+model ItemHistory {
+  id              String         @id @default(cuid())
+  itemId          String
+  item            Item           @relation(fields: [itemId], references: [idItem])
+  warehouseId     String
+  warehouse       Warehouse      @relation(fields: [warehouseId], references: [idWarehouse])
+  quantity        Int
+  type            MovementType
+  
+  // For incoming goods (IGR)
+  poNumber        String?
+  igrNumber       String?
+  igrId           String?
+  incomingGoodReceipt IncomingGoodReceipt? @relation(fields: [igrId], references: [id])
+  
+  // For outgoing goods (DO)
+  mprNumber       String?       // RequestPurchase code
+  doNumber        String?
+  doId            String?
+  deliveryOrder   DeliveryOrder? @relation(fields: [doId], references: [id])
+  locationId      String?
+  location        Location?      @relation(fields: [locationId], references: [idLocation])
+  
+  timestamp       DateTime       @default(now())
+  remarks         String?
+}
+
+enum MovementType {
+  INCOMING
+  OUTGOING
+}
+
+enum Role {
+  Admin
+  Staff
+  User
+}
+
+enum RequestPurchaseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PurchaseOrderStatus {
+  PENDING
+  PARTIALLY_APPROVED
+  FULLY_APPROVED
+  REJECTED
+}
+
+enum ItemRequestStatus {
+  PENDING
+  IN_PROGRESS
+  ON_DELIVERY
+  COMPLETED
+}
+
+enum IGRStatus {
+  PENDING
+  ITEMS_RECEIVED
+  APPROVED
+  REJECTED
+}
+
+enum DeliveryStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
