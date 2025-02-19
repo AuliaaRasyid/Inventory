@@ -120,7 +120,7 @@ const approveRequestPurchase = async (req, res) => {
 
         res.status(200).json({
             message: "Request purchase approved successfully",
-            request: updatedRequest
+            updatedRequest
         });
 
     } catch (error) {

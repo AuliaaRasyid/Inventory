@@ -113,6 +113,7 @@ const loginUser = async (req, res) => {
 };
 
 const getAllUsers = async (req, res) => {
+    const staffId = req.user.id;
     try {
         const users = await prisma.user.findMany();
         res.status(200).json(users);
@@ -123,6 +124,7 @@ const getAllUsers = async (req, res) => {
 };
 
 const getUserById = async (req, res) => {
+    const staffId = req.user.id;
     const { id } = req.params;
 
     try{
@@ -141,11 +143,12 @@ const getUserById = async (req, res) => {
 
 //update user for admin
 const updateUser = async (req, res) => {
+    const staffId = req.user.id;
     const { id } = req.params;
     const { username, password, role } = req.body;
 
     try {
-        const user = await prisma.user.update({
+        const UpdatedUser = await prisma.user.update({
             where: {
                 id: id,
             },
@@ -156,7 +159,7 @@ const updateUser = async (req, res) => {
             },
         });
 
-        res.status(200).json({ message: "User updated successfully", user });
+        res.status(200).json({ message: "User updated successfully", UpdatedUser });
     } catch (error) {
         console.error('Error updating user:', error);
         res.status(500).json({ message: 'Error updating user' });
@@ -166,6 +169,7 @@ const updateUser = async (req, res) => {
 //update user for user
 const updateUserForUser = async (req, res) => {
     const { id } = req.params;
+    const userId = req.user.id;
     const { username, password, currentPassword } = req.body;
 
     try {
@@ -233,7 +237,7 @@ const updateUserForUser = async (req, res) => {
 
         res.status(200).json({
             message: "Profile updated successfully",
-            user: updatedUser
+            updatedUser
         });
 
     } catch (error) {
@@ -260,6 +264,7 @@ const updateUserWithSignature = (req, res) => {
 // Get user's signature
 const getUserSignature = async (req, res) => {
     const { id } = req.params;
+    const staffId = req.user.id;
 
     try {
         const user = await prisma.user.findUnique({
@@ -284,6 +289,7 @@ const getUserSignature = async (req, res) => {
 
 const deleteUser = async (req, res) => {
     const { id } = req.params;
+    const staffId = req.user.id;
 
     try {
         const user = await prisma.user.delete({

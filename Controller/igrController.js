@@ -2,7 +2,6 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 
-// const approveIGR = async (req, res) => {
 //     const { igrId } = req.params;
 //     const { items, remark } = req.body;
 //     const approverId = req.user.id;

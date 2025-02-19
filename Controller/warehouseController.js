@@ -2,6 +2,8 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 const createWarehouse = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const {
             warehouseName,
@@ -36,11 +38,13 @@ const createWarehouse = async (req, res) => {
 };
 
 const addItemToWarehouse = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { warehouseId } = req.params;
         const {
-            itemName,      // Item name to search by
-            itemCode,      // Item code to search by
+            itemName,      
+            itemCode,    
             stockQuantity,
             itemShelfNumber,
             itemShelfBlock,
@@ -74,7 +78,7 @@ const addItemToWarehouse = async (req, res) => {
         const duplicateItem = await prisma.warehouseInventory.findFirst({
             where: {
                 warehouseId,
-                itemId: item.idItem // Use item.idItem now
+                itemId: item.idItem
             }
         });
         if (duplicateItem) {
@@ -85,7 +89,7 @@ const addItemToWarehouse = async (req, res) => {
         const warehouseInventory = await prisma.warehouseInventory.create({
             data: {
                 warehouseId,
-                itemId: item.idItem, // Use item.idItem now
+                itemId: item.idItem,
                 stockQuantity,
                 itemShelfNumber,
                 itemShelfBlock,
@@ -96,7 +100,7 @@ const addItemToWarehouse = async (req, res) => {
             }
         });
 
-        res.status(201).json({
+        res.status(200).json({
             message: "Item added to warehouse inventory successfully",
             warehouseInventory
         });
@@ -107,6 +111,8 @@ const addItemToWarehouse = async (req, res) => {
 };
 
 const getAllWarehouses = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const warehouses = await prisma.warehouse.findMany({
             select: {
@@ -124,6 +130,8 @@ const getAllWarehouses = async (req, res) => {
 };
 
 const getWarehouseById = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
         const warehouse = await prisma.warehouse.findUnique({
@@ -148,6 +156,8 @@ const getWarehouseById = async (req, res) => {
 };
 
 const getWarehouseItems = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
 
@@ -168,7 +178,11 @@ const getWarehouseItems = async (req, res) => {
             }
         });
 
-        res.status(200).json(warehouseInventory);
+        res.status(200).json({
+            message: "Warehouse items retrieved successfully",
+            warehouseName : warehouseExists.warehouseName, 
+            warehouseInventory
+        });
     } catch (error) {
         console.error('Error getting warehouse items:', error);
         res.status(500).json({ message: 'Error getting warehouse items' });
@@ -176,6 +190,8 @@ const getWarehouseItems = async (req, res) => {
 };
 
 const updateWarehouse = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
         const {
@@ -194,8 +210,7 @@ const updateWarehouse = async (req, res) => {
         });
 
         res.status(200).json({
-            message: "Warehouse updated successfully",
-            warehouse: updatedWarehouse
+            message: "Warehouse updated successfully", updatedWarehouse
         });
     } catch (error) {
         console.error('Error updating warehouse:', error);
@@ -211,23 +226,20 @@ const updateWarehouse = async (req, res) => {
     }
 };
 
+// Update the updateWarehouseItem function as well to use inventory id
 const updateWarehouseItem = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
+        const { id } = req.params;  // Using the warehouse inventory id
         const {
-            warehouseId,
-            itemId,
             stockQuantity,
             itemShelfNumber,
             itemShelfBlock,
         } = req.body;
 
         const warehouseInventory = await prisma.warehouseInventory.update({
-            where: {
-                warehouseId_itemId: {
-                    warehouseId,
-                    itemId,
-                },
-            },
+            where: { id },
             data: {
                 stockQuantity,
                 itemShelfNumber,
@@ -238,17 +250,66 @@ const updateWarehouseItem = async (req, res) => {
                 warehouse: true
             }
         });
+        
         res.status(200).json({
             message: "Item updated successfully",
             warehouseInventory
         });
     } catch (error) {
         console.error('Error updating item:', error);
+        
+        if (error.code === 'P2025') {
+            return res.status(404).json({ 
+                message: 'Warehouse inventory item not found' 
+            });
+        }
+        
         res.status(500).json({ message: 'Error updating item' });
     }
-}
+};
 
+
+const deleteWarehouseItem = async (req, res) => {
+    const staffId = req.user.id;
+
+    try {
+        const { id } = req.params;  // Using the warehouse inventory id
+
+        // Check if the warehouse inventory entry exists
+        const inventoryItem = await prisma.warehouseInventory.findUnique({
+            where: { id }
+        });
+
+        if (!inventoryItem) {
+            return res.status(404).json({ 
+                message: "Warehouse inventory item not found" 
+            });
+        }
+
+        // Delete the warehouse inventory entry
+        const deletedItem = await prisma.warehouseInventory.delete({
+            where: { id },
+            include: {
+                item: true,
+                warehouse: true
+            }
+        });
+
+        res.status(200).json({
+            message: "Item removed from warehouse inventory successfully",
+            deletedItem
+        });
+    } catch (error) {
+        console.error('Error deleting item from warehouse inventory:', error);
+        res.status(500).json({ 
+            message: 'Error deleting item from warehouse inventory',
+            error: error.message 
+        });
+    }
+};
 const deleteWarehouse = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
 
@@ -280,5 +341,6 @@ module.exports = {
     updateWarehouseItem,
     getWarehouseItems,
     updateWarehouse,
+    deleteWarehouseItem,
     deleteWarehouse
 };

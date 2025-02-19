@@ -2,6 +2,8 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const createSupplier = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const {
             supplierName,
@@ -24,6 +26,8 @@ const createSupplier = async (req, res) => {
 }
 
 const addSupplierItem = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const supplierId = req.params.supplierId;
         const { itemCode, itemName,  } = req.body;
@@ -102,6 +106,8 @@ const addSupplierItem = async (req, res) => {
 
 
 const getAllSuppliersDetails = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const suppliers = await prisma.supplier.findMany({
             include: {
@@ -118,6 +124,8 @@ const getAllSuppliersDetails = async (req, res) => {
 }
 
 const getSupplierByIdDetails = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
         const supplier = await prisma.supplier.findUnique({
@@ -143,6 +151,8 @@ const getSupplierByIdDetails = async (req, res) => {
 }
 
 const getAllSuppliers = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const suppliers = await prisma.supplier.findMany(
             {
@@ -162,6 +172,8 @@ const getAllSuppliers = async (req, res) => {
 }
 
 const getSupplierById = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
         const supplier = await prisma.supplier.findUnique({
@@ -188,6 +200,8 @@ const getSupplierById = async (req, res) => {
 }
 
 const getSupplierItems = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
 
@@ -242,65 +256,10 @@ const getSupplierItems = async (req, res) => {
         res.status(500).json({ message: 'Error getting supplier items' });
     }
 };
-// const updateSupplier = async (req, res) => {
-//     try {
-//         const { id } = req.params;
-//         const {
-//             supplierName,
-//             supplierPhone,
-//             supplierAddress,
-//             items // Array of item associations to add/update
-//         } = req.body
-
-//         const updatedSupplier = await prisma.supplier.update({
-//             where: { idSupplier: id },
-//             data: {
-//                 supplierName,
-//                 supplierPhone,
-//                 supplierAddress
-//             }
-//         })
-
-//         // If new items are provided, upsert or create new associations
-//         if (items && items.length > 0) {
-//             for (const item of items) {
-//                 await prisma.supplierItem.upsert({
-//                     where: {
-//                         supplierId_itemId: {
-//                             supplierId: id,
-//                             itemId: item.itemId
-//                         }
-//                     },
-//                     update: {
-//                         supplierItemPrice: item.supplierItemPrice
-//                     },
-//                     create: {
-//                         itemId: item.itemId,
-//                         supplierItemPrice: item.supplierItemPrice
-//                     }
-//                 })
-//             }
-//         }
-
-//         // Fetch updated supplier with items
-//         const supplier = await prisma.supplier.findUnique({
-//             where: { idSupplier: id },
-//             include: {
-//                 supplierItems: {
-//                     include: { item: true }
-//                 }
-//             }
-//         })
-
-//         res.status(200).json({ message: "Supplier updated successfully", supplier });
-//     }
-//     catch (error) {
-//         console.error('Error updating supplier:', error);
-//         res.status(500).json({ message: 'Error updating supplier' });
-//     }
-// }
 
 const updateSupplier = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
         const { supplierName, supplierPhone, supplierAddress } = req.body;
@@ -323,6 +282,8 @@ const updateSupplier = async (req, res) => {
 
 
 const deleteSupplier = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
 
@@ -350,6 +311,8 @@ const deleteSupplier = async (req, res) => {
 }
 
 const deleteSupplierItem = async (req, res) => {
+    const staffId = req.user.id;
+
     try {
         const { id } = req.params;
 

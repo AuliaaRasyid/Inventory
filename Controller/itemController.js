@@ -3,6 +3,7 @@ const prisma = new PrismaClient();
 
 const createItem = async (req, res) => {
   const { itemName, itemCode } = req.body;
+  const staffId = req.user.id;
 
   try {
     const item = await prisma.item.create({
@@ -19,6 +20,8 @@ const createItem = async (req, res) => {
 };
 
 const getAllItemsDetails = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const items = await prisma.item.findMany({
       include: {
@@ -38,6 +41,8 @@ const getAllItemsDetails = async (req, res) => {
 };
 
 const getItemByIdDetails = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const { id } = req.params;
     const item = await prisma.item.findUnique({
@@ -66,6 +71,8 @@ const getItemByIdDetails = async (req, res) => {
 };
 
 const getAllItems = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const items = await prisma.item.findMany({
       select: {
@@ -82,6 +89,8 @@ const getAllItems = async (req, res) => {
 };
 
 const getItemById = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const { id } = req.params;
     const item = await prisma.item.findUnique({
@@ -105,6 +114,8 @@ const getItemById = async (req, res) => {
 };
 
 const updateItem = async (req, res) => {
+  const staffId = req.user.id;
+
   const { id } = req.params;
   const {
     itemName,
@@ -186,7 +197,7 @@ const updateItem = async (req, res) => {
 
     res.status(200).json({
       message: "Item updated successfully",
-      item: updatedItem,
+      updatedItem,
     });
   } catch (error) {
     console.error("Error updating item:", error);
@@ -195,6 +206,8 @@ const updateItem = async (req, res) => {
 };
 
 const deleteItem = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const { id } = req.params;
 
@@ -234,6 +247,8 @@ const deleteItem = async (req, res) => {
 
 // Item History
 const getIncomingItemHistory = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const {
       itemCode,
@@ -316,6 +331,8 @@ const getIncomingItemHistory = async (req, res) => {
 };
 
 const getOutgoingItemHistory = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const {
       itemCode,
@@ -408,6 +425,8 @@ const getOutgoingItemHistory = async (req, res) => {
 };
 
 const getItemInventorySummary = async (req, res) => {
+  const staffId = req.user.id;
+
   try {
     const { itemCode } = req.params;
 
