@@ -3,7 +3,6 @@ const router = express.Router();
 const {
     createPurchaseOrderWithItems,
     approvePurchaseOrder,
-    getSupplierItems,
     getPurchaseOrderDetailById,
     getAllPurchaseOrders,
     getAllPurchaseOrdersWithDetails,
@@ -24,14 +23,6 @@ router.post(
     authenticateUser,
     authorizeRoles("Admin", "Staff"),
     approvePurchaseOrder
-);
-
-//fetch for supplier and the items of suplier
-router.get(
-    "/item-suppliers",
-    authenticateUser,
-    authorizeRoles("Staff", "Admin"),
-    getSupplierItems
 );
 
 router.get(

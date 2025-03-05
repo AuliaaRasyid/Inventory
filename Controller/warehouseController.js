@@ -231,7 +231,7 @@ const updateWarehouseItem = async (req, res) => {
     const staffId = req.user.id;
 
     try {
-        const { id } = req.params;  // Using the warehouse inventory id
+        const { id } = req.params; 
         const {
             stockQuantity,
             itemShelfNumber,

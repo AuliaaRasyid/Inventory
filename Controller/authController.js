@@ -43,7 +43,7 @@ const newUser = async (req, res) => {
         // Check if the username already exists
         const existingUser = await prisma.user.findUnique({
             where: {
-                username: username, // Prisma expects `username` to be unique now
+                username: username,
             },
         });
 

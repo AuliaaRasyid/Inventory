@@ -34,7 +34,7 @@ const calculatePrices = (items) => {
 };
 
 const createPurchaseOrderWithItems = async (req, res) => {
-  const { purchaseOrderNumber, purchaseOrderRemark, supplierName, items } =
+  const { purchaseOrderNumber, purchaseOrderNotes, supplierName, items } =
     req.body;
   const staffId = req.user.id;
 
@@ -73,7 +73,7 @@ const createPurchaseOrderWithItems = async (req, res) => {
       include: {
         itemRequests: {
           include: {
-            purchaseOrderItems: true, // Include existing PO items
+            purchaseOrderItems: true, 
           },
         },
       },
@@ -89,48 +89,40 @@ const createPurchaseOrderWithItems = async (req, res) => {
     // Process and validate each item
     const processedItems = await Promise.all(
       items.map(async (item) => {
-        // Find the corresponding request purchase and item request
+        // Find the corresponding request purchase
         const requestPurchase = purchaseRequests.find(
           (pr) => pr.requestCode === item.requestPurchaseCode
         );
 
-        // Case-insensitive item request name matching
+        // Find the matching item request by itemCode (no longer using itemRequestName)
         const itemRequest = requestPurchase.itemRequests.find(
-          (ir) =>
-            ir.itemRequestName.toLowerCase() ===
-            item.itemRequestName.toLowerCase()
+          (ir) => ir.itemRequestName.toLowerCase() === item.itemName.toLowerCase()
         );
 
         if (!itemRequest) {
           throw new Error(
-            `Item request "${item.itemRequestName}" not found in MPR ${item.requestPurchaseCode}`
+            `Item "${item.itemName}" not found in MPR ${item.requestPurchaseCode}`
           );
         }
 
         // Check if item is already assigned to another PO
         if (itemRequest.purchaseOrderItems.length > 0) {
           throw new Error(
-            `Item "${item.itemRequestName}" from MPR ${item.requestPurchaseCode} is already assigned to another purchase order`
+            `Item "${item.itemName}" from MPR ${item.requestPurchaseCode} is already assigned to another purchase order`
           );
         }
 
-        // Validate supplier item exists
-        const supplierItem = await prisma.supplierItem.findFirst({
+        // Validate the item exists in the database
+        const existingItem = await prisma.item.findFirst({
           where: {
-            supplierId: supplier.idSupplier,
-            item: {
-              itemCode: item.itemCode,
-              itemName: item.itemName,
-            },
-          },
-          include: {
-            item: true,
+            itemCode: item.itemCode,
+            itemName: item.itemName,
           },
         });
 
-        if (!supplierItem) {
+        if (!existingItem) {
           throw new Error(
-            `Item ${item.itemName} (${item.itemCode}) not found for supplier ${supplierName}`
+            `Item ${item.itemName} (${item.itemCode}) not found in the system`
           );
         }
 
@@ -147,10 +139,10 @@ const createPurchaseOrderWithItems = async (req, res) => {
           unitPrice: item.unitPrice,
           totalPrice,
           consignTo: item.consignTo,
+          itemRemarks: itemRequest.itemRemark || "", // Get item remarks from the itemRequest
           originalRequest: {
             code: item.requestPurchaseCode,
-            itemName: item.itemRequestName,
-            useDuration: itemRequest.itemRequestUseDuration,
+            itemPurpose: itemRequest.itemPurpose,
           },
         };
       })
@@ -167,7 +159,7 @@ const createPurchaseOrderWithItems = async (req, res) => {
       const po = await prisma.purchaseOrder.create({
         data: {
           purchaseOrderNumber,
-          purchaseOrderRemark,
+          purchaseOrderNotes, // Changed from purchaseOrderRemark to purchaseOrderNotes
           createdById: staffId,
           status: "PENDING",
           totalAmount: totalAmount.toString(),
@@ -186,7 +178,8 @@ const createPurchaseOrderWithItems = async (req, res) => {
               totalPrice: item.totalPrice,
               supplierName: supplierName,
               supplierTotal: totalAmount.toString(),
-              consignTo: item.consignTo, // Add consignTo to purchase order item
+              consignTo: item.consignTo,
+              itemRemarks: item.itemRemarks, 
             })),
           },
         },
@@ -232,21 +225,21 @@ const createPurchaseOrderWithItems = async (req, res) => {
     // Format the response
     const response = {
       purchaseOrderNumber: completePO.purchaseOrderNumber,
-      purchaseOrderRemark: completePO.purchaseOrderRemark,
+      purchaseOrderNotes: completePO.purchaseOrderNotes,
       status: completePO.status,
       createdBy: completePO.createdBy.username,
       createdAt: completePO.createdAt,
       supplierName,
       items: processedItems.map((item) => ({
         requestPurchaseCode: item.originalRequest.code,
-        itemRequestName: item.originalRequest.itemName,
         itemName: item.itemName,
         itemCode: item.itemCode,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
         consignTo: item.consignTo,
-        useDuration: item.originalRequest.useDuration,
+        itemRemarks: item.itemRemarks,
+        itemPurpose: item.originalRequest.itemPurpose,
       })),
       totalAmount,
     };
@@ -264,37 +257,13 @@ const createPurchaseOrderWithItems = async (req, res) => {
   }
 };
 
-const getSupplierItems = async (req, res) => {
-  const { supplierId } = req.params;
-
-  try {
-    const supplierItems = await prisma.supplierItem.findMany({
-      where: {
-        supplierId,
-      },
-      include: {
-        item: {
-          select: {
-            itemCode: true,
-            itemName: true,
-          },
-        },
-      },
-    });
-
-    res.status(200).json(supplierItems);
-  } catch (error) {
-    console.error("Error getting supplier items:", error);
-    res.status(500).json({ message: "Error getting supplier items" });
-  }
-};
-
 const getAllPurchaseOrders = async (req, res) => {
   try {
     const purchaseOrders = await prisma.purchaseOrder.findMany({
       select: {
         idPurchaseOrder: true,
         purchaseOrderNumber: true,
+        purchaseOrderNotes: true, // Changed from purchaseOrderRemark
         requestPurchases: {
           select: {
             requestCode: true,
@@ -317,6 +286,7 @@ const getAllPurchaseOrders = async (req, res) => {
     const formattedPurchaseOrders = purchaseOrders.map((po) => ({
       idPurchaseOrder: po.idPurchaseOrder,
       purchaseOrderNumber: po.purchaseOrderNumber,
+      purchaseOrderNotes: po.purchaseOrderNotes, // Changed from purchaseOrderRemark
       requestCodes:
         po.requestPurchases.map((rp) => rp.requestCode).join(", ") || "-",
       createdBy: po.createdBy.username,
@@ -331,6 +301,7 @@ const getAllPurchaseOrders = async (req, res) => {
     res.status(500).json({ message: "Error getting purchase orders" });
   }
 };
+
 const getAllPurchaseOrdersWithDetails = async (req, res) => {
   try {
     const purchaseOrders = await prisma.purchaseOrder.findMany({
@@ -353,7 +324,9 @@ const getAllPurchaseOrdersWithDetails = async (req, res) => {
                 id: true,
                 itemRequestName: true,
                 itemRequestAmount: true,
-                itemRequestUseDuration: true,
+                itemPriorityLevel: true,
+                itemRemark: true,
+                itemPurpose: true,              
               },
             },
           },
@@ -368,7 +341,6 @@ const getAllPurchaseOrdersWithDetails = async (req, res) => {
           },
         },
         approvals: {
-          // Use the new relation
           include: {
             approvedBy: {
               select: {
@@ -389,34 +361,42 @@ const getAllPurchaseOrdersWithDetails = async (req, res) => {
         po.purchaseOrderItems
       );
 
+      // Gather all related request purchases
+      const requestDetails = po.requestPurchases.map(rp => ({
+        requestCode: rp.requestCode,
+        requestedBy: rp.user?.username,
+        requestedByRole: rp.user?.role,
+        itemRequests: rp.itemRequests,
+      }));
+
       return {
         purchaseOrderDetails: {
           idPurchaseOrder: po.idPurchaseOrder,
           purchaseOrderNumber: po.purchaseOrderNumber,
+          purchaseOrderNotes: po.purchaseOrderNotes, // Changed from purchaseOrderRemark
           status: po.status,
           createdAt: po.createdAt,
-          approvedAt: po.approvedAt,
           totalAmount: totalPOAmount.toString(),
         },
-        requestDetails: {
-          requestCode: po.requestPurchase?.requestCode,
-          requestedBy: po.requestPurchase?.user?.username,
-          requestedByRole: po.requestPurchase?.user?.role,
-          itemRequests: po.requestPurchase?.itemRequests,
-        },
+        requestDetails: requestDetails,
         processingDetails: {
           createdBy: po.createdBy.username,
           createdByRole: po.createdBy.role,
           approvals: po.approvals.map((approval) => ({
             approvedBy: approval.approvedBy.username,
             approvedByRole: approval.approvedBy.role,
+            approvedAt: approval.approvedAt,
+            signature: approval.signature,
           })),
         },
         supplierGroups: Object.entries(supplierGroups).map(
           ([supplierName, items]) => ({
             supplierName,
             totalAmount: supplierTotals[supplierName].toString(),
-            items: items,
+            items: items.map(item => ({
+              ...item,
+              itemRemarks: item.itemRemarks || "", // Include itemRemarks in the response
+            })),
           })
         ),
       };
@@ -466,6 +446,7 @@ const getPurchaseOrderDetailById = async (req, res) => {
       purchaseOrderDetails: {
         idPurchaseOrder: purchaseOrder.idPurchaseOrder,
         purchaseOrderNumber: purchaseOrder.purchaseOrderNumber,
+        purchaseOrderNotes: purchaseOrder.purchaseOrderNotes, // Changed from purchaseOrderRemark
         status: purchaseOrder.status,
         createdAt: purchaseOrder.createdAt,
         totalAmount: purchaseOrder.totalAmount,
@@ -474,13 +455,14 @@ const getPurchaseOrderDetailById = async (req, res) => {
           .join(", "),
       },
       items: purchaseOrder.purchaseOrderItems.map((item) => ({
-        itemId: item.idItem,
+        itemId: item.idPurchaseOrderItem,
         itemName: item.itemName,
         itemCode: item.itemCode,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
         consignTo: item.consignTo,
+        itemRemarks: item.itemRemarks || "", // Include itemRemarks in the response
       })),
     };
 
@@ -493,7 +475,7 @@ const getPurchaseOrderDetailById = async (req, res) => {
 
 const updatePurchaseOrder = async (req, res) => {
   const { id } = req.params;
-  const { purchaseOrderRemark, supplierName, items } = req.body;
+  const { purchaseOrderNotes, supplierName, items } = req.body; // Changed from purchaseOrderRemark
   const staffId = req.user.id;
 
   try {
@@ -569,41 +551,33 @@ const updatePurchaseOrder = async (req, res) => {
     // Process and validate each item
     const processedItems = await Promise.all(
       items.map(async (item) => {
-        // Find the corresponding request purchase and item request
+        // Find the corresponding request purchase
         const requestPurchase = purchaseRequests.find(
           (pr) => pr.requestCode === item.requestPurchaseCode
         );
 
-        // Case-insensitive item request name matching
+        // Find the matching item request by itemName
         const itemRequest = requestPurchase.itemRequests.find(
-          (ir) =>
-            ir.itemRequestName.toLowerCase() ===
-            item.itemRequestName.toLowerCase()
+          (ir) => ir.itemRequestName.toLowerCase() === item.itemName.toLowerCase()
         );
 
         if (!itemRequest) {
           throw new Error(
-            `Item request "${item.itemRequestName}" not found in MPR ${item.requestPurchaseCode}`
+            `Item "${item.itemName}" not found in MPR ${item.requestPurchaseCode}`
           );
         }
 
-        // Validate supplier item exists
-        const supplierItem = await prisma.supplierItem.findFirst({
+        // Validate the item exists in the database
+        const existingItem = await prisma.item.findFirst({
           where: {
-            supplierId: supplier.idSupplier,
-            item: {
-              itemCode: item.itemCode,
-              itemName: item.itemName,
-            },
-          },
-          include: {
-            item: true,
+            itemCode: item.itemCode,
+            itemName: item.itemName,
           },
         });
 
-        if (!supplierItem) {
+        if (!existingItem) {
           throw new Error(
-            `Item ${item.itemName} (${item.itemCode}) not found for supplier ${supplierName}`
+            `Item ${item.itemName} (${item.itemCode}) not found in the system`
           );
         }
 
@@ -620,10 +594,10 @@ const updatePurchaseOrder = async (req, res) => {
           unitPrice: item.unitPrice,
           totalPrice,
           consignTo: item.consignTo,
+          itemRemarks: itemRequest.itemRemark || "", // Get item remarks from the itemRequest
           originalRequest: {
             code: item.requestPurchaseCode,
-            itemName: item.itemRequestName,
-            useDuration: itemRequest.itemRequestUseDuration,
+            itemPurpose: itemRequest.itemPurpose,
           },
         };
       })
@@ -650,7 +624,7 @@ const updatePurchaseOrder = async (req, res) => {
       const po = await prisma.purchaseOrder.update({
         where: { idPurchaseOrder: id },
         data: {
-          purchaseOrderRemark,
+          purchaseOrderNotes, // Changed from purchaseOrderRemark
           totalAmount: totalAmount.toString(),
           // Disconnect all existing request purchases and connect new ones
           requestPurchases: {
@@ -668,6 +642,7 @@ const updatePurchaseOrder = async (req, res) => {
               supplierName: supplierName,
               supplierTotal: totalAmount.toString(),
               consignTo: item.consignTo,
+              itemRemarks: item.itemRemarks, // Added itemRemarks
             })),
           },
         },
@@ -697,7 +672,7 @@ const updatePurchaseOrder = async (req, res) => {
     // Format the response
     const response = {
       purchaseOrderNumber: completePO.purchaseOrderNumber,
-      purchaseOrderRemark: completePO.purchaseOrderRemark,
+      purchaseOrderNotes: completePO.purchaseOrderNotes, // Changed from purchaseOrderRemark
       status: completePO.status,
       createdBy: completePO.createdBy.username,
       createdAt: completePO.createdAt,
@@ -707,14 +682,14 @@ const updatePurchaseOrder = async (req, res) => {
         .join(", "),
       items: processedItems.map((item) => ({
         requestPurchaseCode: item.originalRequest.code,
-        itemRequestName: item.originalRequest.itemName,
         itemName: item.itemName,
         itemCode: item.itemCode,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: item.totalPrice,
         consignTo: item.consignTo,
-        useDuration: item.originalRequest.useDuration,
+        itemRemarks: item.itemRemarks,
+        itemPurpose: item.originalRequest.itemPurpose,
       })),
       totalAmount,
     };
@@ -935,7 +910,6 @@ const approvePurchaseOrder = async (req, res) => {
     }
 
     const result = await prisma.$transaction(async (prisma) => {
-      console.log("Creating approval...");
       const approval = await prisma.pOApproval.create({
         data: {
           purchaseOrderId,
@@ -944,7 +918,6 @@ const approvePurchaseOrder = async (req, res) => {
         },
       });
 
-      console.log("Counting approvals...");
       const approvalCount = await prisma.pOApproval.count({
         where: { purchaseOrderId },
       });
@@ -954,7 +927,6 @@ const approvePurchaseOrder = async (req, res) => {
       if (approvalCount >= 3) {
         status = "FULLY_APPROVED";
 
-        console.log("Updating item requests to IN_PROGRESS...");
         await prisma.itemRequest.updateMany({
           where: {
             id: {
@@ -966,15 +938,13 @@ const approvePurchaseOrder = async (req, res) => {
           data: { itemRequestStatus: "IN_PROGRESS" },
         });
 
-        console.log("Generating IGR number...");
         const igrNumber = await generateUniqueIgrNumber();
 
-        console.log("Creating IGR...");
         igr = await prisma.incomingGoodReceipt.create({
           data: {
             igrNumber,
             purchaseOrderId,
-            remarks: purchaseOrder.purchaseOrderRemark || "",
+            notes: purchaseOrder.purchaseOrderNotes || "",
             items: {
               create: purchaseOrder.purchaseOrderItems.map((item) => ({
                 itemName: item.itemName,
@@ -985,14 +955,12 @@ const approvePurchaseOrder = async (req, res) => {
           },
         });
 
-        console.log("Updating purchase order status...");
         updatedPO = await prisma.purchaseOrder.update({
           where: { idPurchaseOrder: purchaseOrderId },
           data: { status },
         });
       } else if (approvalCount > 0) {
         status = "PARTIALLY_APPROVED";
-        console.log("Updating purchase order status...");
         updatedPO = await prisma.purchaseOrder.update({
           where: { idPurchaseOrder: purchaseOrderId },
           data: { status },
@@ -1023,7 +991,6 @@ const approvePurchaseOrder = async (req, res) => {
 
 module.exports = {
   createPurchaseOrderWithItems,
-  getSupplierItems,
   getAllPurchaseOrders,
   getAllPurchaseOrdersWithDetails,
   getPurchaseOrderDetailById,

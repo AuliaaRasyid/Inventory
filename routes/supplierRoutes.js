@@ -2,16 +2,14 @@ const express = require("express");
 const router = express.Router();
 const {
   createSupplier,
-  addSupplierItem,
   getAllSuppliersDetails,
   getSupplierByIdDetails,
-  getSupplierItems,
   getSupplierById,
   getAllSuppliers,
   updateSupplier,
   deleteSupplier,
-  deleteSupplierItem,
 } = require("../Controller/supplierController");
+
 const {
   authenticateUser,
   authorizeRoles,
@@ -24,13 +22,6 @@ router.post(
   createSupplier
 );
 
-router.post(
-  "/add-supplier-item/:supplierId",
-  authenticateUser,
-  authorizeRoles("Admin"),
-  addSupplierItem
-);
-
 //use these routes
 router.get(
   "/get-all",
@@ -38,13 +29,6 @@ router.get(
   authorizeRoles("Admin", "Staff"),
   getAllSuppliers
 ); //for getting tables
-
-router.get(
-  "/supplier-items/:id",
-  authenticateUser,
-  authorizeRoles("Admin", "Staff"),
-  getSupplierItems
-); //for getting supplier items
 
 router.put(
   "/update/:id",
@@ -60,13 +44,6 @@ router.delete(
   deleteSupplier
 );
 
-router.delete(
-  "/delete-supplier-items/:id",
-  authenticateUser,
-  authorizeRoles("Admin"),
-  deleteSupplierItem
-);
-
 //for testing too see everything
 router.get(
   "/get-all-details",
@@ -76,7 +53,7 @@ router.get(
 );
 
 router.get(
-  "/get-all-details/:idF",
+  "/get-all-details/:id",
   authenticateUser,
   authorizeRoles("Admin"),
   getSupplierByIdDetails

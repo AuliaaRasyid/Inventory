@@ -18,7 +18,7 @@ const {
 router.post(
   "/create",
   authenticateUser,
-  authorizeRoles("User"),
+  authorizeRoles("User", "Admin"),
   createRequestPurchase
 );
 

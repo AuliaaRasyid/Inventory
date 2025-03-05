@@ -6,7 +6,7 @@ const createDeliveryOrder = async (req, res) => {
     const {
       requestCode,
       doNumber, 
-      remarks,
+      notes,
       items, 
     } = req.body;
 
@@ -96,7 +96,7 @@ const createDeliveryOrder = async (req, res) => {
       data: {
         doNumber,
         requestCode,
-        remarks,
+        notes,
         userId,
         items: {
           create: await Promise.all(
@@ -109,6 +109,7 @@ const createDeliveryOrder = async (req, res) => {
                 itemName: item.itemName,
                 itemCode: item.itemCode,
                 quantity: item.quantity,
+                remarks: item.remarks,
                 warehouseId: warehouse.idWarehouse,
               };
             })
@@ -285,7 +286,7 @@ const approveDeliveryOrder = async (req, res) => {
               doNumber: deliveryOrder.doNumber,
               doId: deliveryOrder.id,
               locationId: deliveryOrder.requestPurchase?.locationId,
-              remarks: `Delivery Order completion - ${deliveryOrder.doNumber}`
+              notes: `Delivery Order completion - ${deliveryOrder.doNumber}`
             }
           });
         }
@@ -356,7 +357,7 @@ const getDeliveryOrderDetails = async (req, res) => {
         doNumber: true,
         requestCode: true,
         status: true,
-        remarks: true,
+        notes: true,
         createdBy: {
           select: {
             username: true,
@@ -368,6 +369,7 @@ const getDeliveryOrderDetails = async (req, res) => {
             itemName: true,
             itemCode: true,
             quantity: true,
+            remarks: true,
             warehouse: {
               select: {
                 warehouseName: true,
@@ -390,6 +392,7 @@ const getDeliveryOrderDetails = async (req, res) => {
         itemName: item.itemName,
         itemCode: item.itemCode,
         quantity: item.quantity,
+        remarks: item.remarks,
         warehouseName: item.warehouse.warehouseName,
       })),
     };
@@ -404,7 +407,7 @@ const getDeliveryOrderDetails = async (req, res) => {
 const editDeliveryOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { requestCode, doNumber, remarks, items } = req.body;
+    const { requestCode, doNumber, notes, items } = req.body;
 
     // Check if delivery order exists and get its current status
     const existingDO = await prisma.deliveryOrder.findUnique({
@@ -511,7 +514,7 @@ const editDeliveryOrder = async (req, res) => {
         data: {
           doNumber,
           requestCode,
-          remarks,
+          notes,
           items: {
             create: await Promise.all(
               items.map(async (item) => {
@@ -523,6 +526,7 @@ const editDeliveryOrder = async (req, res) => {
                   itemName: item.itemName,
                   itemCode: item.itemCode,
                   quantity: item.quantity,
+                  remarks: item.remarks,
                   warehouseId: warehouse.idWarehouse,
                 };
               })

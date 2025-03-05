@@ -2,14 +2,34 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const createItem = async (req, res) => {
-  const { itemName, itemCode } = req.body;
+  const { itemName, itemCode, itemCategory } = req.body;
   const staffId = req.user.id;
 
   try {
+    if (!itemName || !itemCode || !itemCategory) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const existingItem = await prisma.item.findFirst({
+      where: {
+        OR: [
+          { itemName: itemName },
+          { itemCode: itemCode }
+        ]
+      }
+    });
+
+    if (existingItem) {
+      return res.status(400).json({
+        message: "An item with the same name or code already exists.",
+      });
+    }
+
     const item = await prisma.item.create({
       data: {
         itemName,
         itemCode,
+        itemCategory
       },
     });
     res.status(201).json({ message: "Item created successfully", item });
@@ -79,6 +99,7 @@ const getAllItems = async (req, res) => {
         idItem: true,
         itemName: true,
         itemCode: true,
+        itemCategory: true
       },
     });
     res.status(200).json(items);
@@ -101,6 +122,7 @@ const getItemById = async (req, res) => {
         idItem: true,
         itemName: true,
         itemCode: true,
+        itemCategory: true
       },
     });
     if (!item) {
@@ -120,11 +142,26 @@ const updateItem = async (req, res) => {
   const {
     itemName,
     itemCode,
-    suppliers,
+    itemCategory,
     warehouseInventories,
   } = req.body;
 
   try {
+    const existingItem = await prisma.item.findFirst({
+      where: {
+        OR: [
+          { itemName: itemName },
+          { itemCode: itemCode }
+        ]
+      }
+    });
+
+    if (existingItem) {
+      return res.status(400).json({
+        message: "An item with the same name or code already exists.",
+      });
+    }
+
     const updatedItem = await prisma.$transaction(async (prisma) => {
       // Update the item
       const item = await prisma.item.update({
@@ -132,29 +169,9 @@ const updateItem = async (req, res) => {
         data: {
           itemName,
           itemCode,
+          itemCategory
         },
       });
-
-      // If new suppliers are provided, upsert or create new associations
-      if (suppliers && suppliers.length > 0) {
-        for (const supplier of suppliers) {
-          await prisma.supplierItem.upsert({
-            where: {
-              supplierId_itemId: {
-                supplierId: supplier.supplierId,
-                itemId: id,
-              },
-            },
-            update: {
-              supplierItemPrice: supplier.supplierItemPrice,
-            },
-            create: {
-              supplierId: supplier.supplierId,
-              supplierItemPrice: supplier.supplierItemPrice,
-            },
-          });
-        }
-      }
 
       // If warehouse inventories are provided, upsert or create new associations
       if (warehouseInventories && warehouseInventories.length > 0) {
@@ -253,6 +270,7 @@ const getIncomingItemHistory = async (req, res) => {
     const {
       itemCode,
       itemName,
+      itemCategory,
       warehouseName,
       startDate,
       endDate,
@@ -337,6 +355,7 @@ const getOutgoingItemHistory = async (req, res) => {
     const {
       itemCode,
       itemName,
+      itemCategory,
       warehouseName,
       startDate,
       endDate,
