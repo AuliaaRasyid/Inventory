@@ -73,7 +73,11 @@ const createPurchaseOrderWithItems = async (req, res) => {
       include: {
         itemRequests: {
           include: {
-            purchaseOrderItems: true, 
+            purchaseOrderItems: {
+              include: {
+                purchaseOrder: true
+              }
+            },
           },
         },
       },
@@ -86,6 +90,9 @@ const createPurchaseOrderWithItems = async (req, res) => {
       });
     }
 
+    // Collect item requests that need previous PO items deleted
+    const itemRequestsToCleanup = [];
+
     // Process and validate each item
     const processedItems = await Promise.all(
       items.map(async (item) => {
@@ -94,9 +101,10 @@ const createPurchaseOrderWithItems = async (req, res) => {
           (pr) => pr.requestCode === item.requestPurchaseCode
         );
 
-        // Find the matching item request by itemCode (no longer using itemRequestName)
+        // Find the matching item request by itemName
         const itemRequest = requestPurchase.itemRequests.find(
-          (ir) => ir.itemRequestName.toLowerCase() === item.itemName.toLowerCase()
+          (ir) =>
+            ir.itemRequestName.toLowerCase() === item.itemName.toLowerCase()
         );
 
         if (!itemRequest) {
@@ -107,9 +115,18 @@ const createPurchaseOrderWithItems = async (req, res) => {
 
         // Check if item is already assigned to another PO
         if (itemRequest.purchaseOrderItems.length > 0) {
-          throw new Error(
-            `Item "${item.itemName}" from MPR ${item.requestPurchaseCode} is already assigned to another purchase order`
+          const isAssignedToNonRejectedPO = itemRequest.purchaseOrderItems.some(
+            poItem => poItem.purchaseOrder && poItem.purchaseOrder.status !== "REJECTED"
           );
+          
+          if (isAssignedToNonRejectedPO) {
+            throw new Error(
+              `Item "${item.itemName}" from MPR ${item.requestPurchaseCode} is already assigned to another active purchase order`
+            );
+          } else {
+            // If item is assigned to a rejected PO, add to cleanup list
+            itemRequestsToCleanup.push(itemRequest.id);
+          }
         }
 
         // Validate the item exists in the database
@@ -139,7 +156,7 @@ const createPurchaseOrderWithItems = async (req, res) => {
           unitPrice: item.unitPrice,
           totalPrice,
           consignTo: item.consignTo,
-          itemRemarks: itemRequest.itemRemark || "", // Get item remarks from the itemRequest
+          itemRemarks: itemRequest.itemRemark || "",
           originalRequest: {
             code: item.requestPurchaseCode,
             itemPurpose: itemRequest.itemPurpose,
@@ -155,11 +172,23 @@ const createPurchaseOrderWithItems = async (req, res) => {
 
     // Create purchase order with items in a transaction
     const purchaseOrder = await prisma.$transaction(async (prisma) => {
+      // First, delete purchase order items for rejected POs
+      if (itemRequestsToCleanup.length > 0) {
+        await prisma.purchaseOrderItem.deleteMany({
+          where: {
+            itemRequestId: { in: itemRequestsToCleanup },
+            purchaseOrder: {
+              status: "REJECTED"
+            }
+          },
+        });
+      }
+
       // Create the main purchase order
       const po = await prisma.purchaseOrder.create({
         data: {
           purchaseOrderNumber,
-          purchaseOrderNotes, // Changed from purchaseOrderRemark to purchaseOrderNotes
+          purchaseOrderNotes,
           createdById: staffId,
           status: "PENDING",
           totalAmount: totalAmount.toString(),
@@ -179,13 +208,13 @@ const createPurchaseOrderWithItems = async (req, res) => {
               supplierName: supplierName,
               supplierTotal: totalAmount.toString(),
               consignTo: item.consignTo,
-              itemRemarks: item.itemRemarks, 
+              itemRemarks: item.itemRemarks,
             })),
           },
         },
       });
 
-      // Update request purchases to link them to the PO using nested updates
+      // Update request purchases to link them to the PO
       const uniqueRequestIds = [
         ...new Set(processedItems.map((item) => item.requestPurchaseId)),
       ];
@@ -326,7 +355,7 @@ const getAllPurchaseOrdersWithDetails = async (req, res) => {
                 itemRequestAmount: true,
                 itemPriorityLevel: true,
                 itemRemark: true,
-                itemPurpose: true,              
+                itemPurpose: true,
               },
             },
           },
@@ -362,7 +391,7 @@ const getAllPurchaseOrdersWithDetails = async (req, res) => {
       );
 
       // Gather all related request purchases
-      const requestDetails = po.requestPurchases.map(rp => ({
+      const requestDetails = po.requestPurchases.map((rp) => ({
         requestCode: rp.requestCode,
         requestedBy: rp.user?.username,
         requestedByRole: rp.user?.role,
@@ -393,7 +422,7 @@ const getAllPurchaseOrdersWithDetails = async (req, res) => {
           ([supplierName, items]) => ({
             supplierName,
             totalAmount: supplierTotals[supplierName].toString(),
-            items: items.map(item => ({
+            items: items.map((item) => ({
               ...item,
               itemRemarks: item.itemRemarks || "", // Include itemRemarks in the response
             })),
@@ -446,7 +475,7 @@ const getPurchaseOrderDetailById = async (req, res) => {
       purchaseOrderDetails: {
         idPurchaseOrder: purchaseOrder.idPurchaseOrder,
         purchaseOrderNumber: purchaseOrder.purchaseOrderNumber,
-        purchaseOrderNotes: purchaseOrder.purchaseOrderNotes, // Changed from purchaseOrderRemark
+        purchaseOrderNotes: purchaseOrder.purchaseOrderNotes,
         status: purchaseOrder.status,
         createdAt: purchaseOrder.createdAt,
         totalAmount: purchaseOrder.totalAmount,
@@ -558,7 +587,8 @@ const updatePurchaseOrder = async (req, res) => {
 
         // Find the matching item request by itemName
         const itemRequest = requestPurchase.itemRequests.find(
-          (ir) => ir.itemRequestName.toLowerCase() === item.itemName.toLowerCase()
+          (ir) =>
+            ir.itemRequestName.toLowerCase() === item.itemName.toLowerCase()
         );
 
         if (!itemRequest) {
@@ -733,7 +763,7 @@ const deletePurchaseOrder = async (req, res) => {
       return res.status(404).json({ message: "Purchase order not found" });
     }
 
-    // Check if PO can be deleted (must be PENDING)
+    // Check if PO can be deleted (must be PENDING) or if its ADMIN
     if (user.role !== "Admin" && existingPO.status !== "PENDING") {
       return res.status(400).json({
         message: "Cannot delete purchase order that is not in PENDING status",
@@ -775,7 +805,7 @@ const deletePurchaseOrder = async (req, res) => {
         },
       });
 
-      // Finally delete the purchase order
+      // delete the purchase order
       await prisma.purchaseOrder.delete({
         where: { idPurchaseOrder: id },
       });
@@ -905,7 +935,7 @@ const approvePurchaseOrder = async (req, res) => {
 
     if (hasApproved) {
       return res.status(400).json({
-        message: "You have already approved this purchase order",
+        message: "You have already approved or rejected this purchase order",
       });
     }
 
@@ -989,6 +1019,93 @@ const approvePurchaseOrder = async (req, res) => {
   }
 };
 
+const rejectPurchaseOrder = async (req, res) => {
+  const { purchaseOrderNumber } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Validate user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, signature: true },
+    });
+
+    if (!user || (user.role !== "Admin" && user.role !== "Staff")) {
+      return res
+        .status(403)
+        .json({ message: "Only Admin and Staff can reject purchase orders" });
+    }
+
+    if (!user.signature) {
+      return res.status(400).json({
+        message:
+          "You need to have a signature registered to reject purchase orders",
+      });
+    }
+
+    // Find the purchase order by number instead of ID
+    const purchaseOrder = await prisma.purchaseOrder.findUnique({
+      where: { purchaseOrderNumber },
+      include: { purchaseOrderItems: true, approvals: true },
+    });
+
+    if (!purchaseOrder) {
+      return res.status(404).json({ message: "Purchase Order not found" });
+    }
+
+    if (purchaseOrder.status === "REJECTED") {
+      return res
+        .status(400)
+        .json({ message: "Purchase Order is already rejected" });
+    }
+
+    // Reject the purchase order in a transaction
+    const rejectedPurchaseOrder = await prisma.$transaction(async (prisma) => {
+      // Update purchase order status to REJECTED (using the purchaseOrderNumber)
+      const updatedPO = await prisma.purchaseOrder.update({
+        where: { purchaseOrderNumber },
+        data: { status: "REJECTED" },
+      });
+
+      // Update item requests associated with this purchase order
+      await prisma.itemRequest.updateMany({
+        where: {
+          id: {
+            in: purchaseOrder.purchaseOrderItems
+              .map((poItem) => poItem.itemRequestId)
+              .filter(Boolean),
+          },
+        },
+        data: { itemRequestStatus: "PENDING" },
+      });
+
+      // Log the rejection approval (using the purchase order ID from the found order)
+      await prisma.pOApproval.create({
+        data: {
+          purchaseOrderId: purchaseOrder.idPurchaseOrder,
+          approvedById: userId,
+          signature: user.signature,
+        },
+      });
+
+      return updatedPO;
+    });
+
+    res.status(200).json({
+      message: "Purchase Order rejected successfully",
+      rejectedPurchaseOrder,
+    });
+  } catch (error) {
+    console.error("Error rejecting purchase order:", error);
+    res
+      .status(500)
+      .json({
+        message: "Error rejecting purchase order",
+        error: error.message,
+      });
+  }
+};
+
 module.exports = {
   createPurchaseOrderWithItems,
   getAllPurchaseOrders,
@@ -997,4 +1114,5 @@ module.exports = {
   updatePurchaseOrder,
   deletePurchaseOrder,
   approvePurchaseOrder,
+  rejectPurchaseOrder,
 };

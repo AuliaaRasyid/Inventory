@@ -8,6 +8,7 @@ const {
     getAllPurchaseOrdersWithDetails,
     updatePurchaseOrder,
     deletePurchaseOrder,
+    rejectPurchaseOrder
 } = require("../Controller/purchaseOrderController");
 const { authenticateUser, authorizeRoles } = require("../Middleware/authenticate");
 
@@ -58,6 +59,13 @@ router.delete(
     authenticateUser,
     authorizeRoles("Admin", "Staff"), 
     deletePurchaseOrder
+);
+
+router.post(
+    "/reject",
+    authenticateUser,
+    authorizeRoles("Admin", "Staff"), 
+    rejectPurchaseOrder
 );
 
 module.exports = router;

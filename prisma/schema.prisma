@@ -67,13 +67,13 @@ model PurchaseOrderItem {
   supplierName        String
   supplierTotal       String
   consignTo           String?
-  itemRemarks         String? // New field added for item remarks
+  itemRemarks         String? 
 }
 
 model PurchaseOrder {
   idPurchaseOrder     String               @id @default(cuid())
   purchaseOrderNumber String               @unique
-  purchaseOrderNotes  String? // Changed from purchaseOrderRemark
+  purchaseOrderNotes  String? 
   requestPurchases    RequestPurchase[]
   createdById         String
   createdBy           User                 @relation("CreatedByStaff", fields: [createdById], references: [id])

@@ -8,7 +8,9 @@ const {
   getRequestPurchaseById,
   getEveryRequestPurchases,
   updateItemRequestInPurchase,
-  deleteRequest
+  deleteRequest,
+  completeRequestPurchaseItems,
+  rejectRequestPurchase
 } = require("../Controller/requestPurchaseContoller");
 const {
   authenticateUser,
@@ -73,6 +75,20 @@ router.post(
   authenticateUser,
   authorizeRoles("Staff", "Admin"),
   approveRequestPurchase
+);
+
+router.post(
+  "/complete",
+  authenticateUser,
+  authorizeRoles("Staff", "Admin"),
+  completeRequestPurchaseItems
+);
+
+router.post(
+  "/reject",
+  authenticateUser,
+  authorizeRoles("Staff", "Admin"),
+  rejectRequestPurchase
 );
 
 module.exports = router;

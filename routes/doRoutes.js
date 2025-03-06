@@ -5,7 +5,8 @@ const { createDeliveryOrder,
     getAllDeliveryOrders,
     getDeliveryOrderDetails,
     editDeliveryOrder,
-    deleteDeliveryOrder
+    deleteDeliveryOrder,
+    rejectDeliveryOrder
 } = require('../Controller/doController');
 
 const { authenticateUser, authorizeRoles } = require("../Middleware/authenticate");
@@ -49,6 +50,13 @@ router.delete(
     authenticateUser,
     authorizeRoles('Admin', 'Staff'),
     deleteDeliveryOrder
+)
+
+router.post(
+    '/reject/:deliveryOrderId',
+    authenticateUser,
+    authorizeRoles('Admin', 'Staff'),
+    rejectDeliveryOrder
 )
 
 module.exports = router;

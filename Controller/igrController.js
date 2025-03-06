@@ -1,9 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-
-
-
 // Update the approveIGR function to add history recording
 const approveIGR = async (req, res) => {
     const { igrId } = req.params;
@@ -34,9 +31,9 @@ const approveIGR = async (req, res) => {
         }
 
         // Check if the IGR is already approved
-        if (existingIGR.status === 'APPROVED') {
+        if (existingIGR.status === 'APPROVED' || existingIGR.status === 'REJECTED') {
             return res.status(400).json({
-                message: "This IGR has already been approved and cannot be approved again.",
+                message: "This IGR has already been approved or rejected and cannot be approved again.",
                 igrNumber: existingIGR.igrNumber
             });
         }
@@ -398,10 +395,9 @@ const deleteIGR = async (req, res) => {
     }
 };
 
-
 module.exports = {
     approveIGR,
     getIGRList,
     getIGRDetails,
-    deleteIGR
+    deleteIGR,
 };

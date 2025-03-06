@@ -113,7 +113,7 @@ const createRequestPurchase = async (req, res) => {
       console.error("Error creating request purchase:", error);
       res.status(500).json({ message: "Error creating request purchase" });
     }
-  };
+};
 
 const approveRequestPurchase = async (req, res) => {
   const { requestPurchaseId } = req.body;
@@ -380,9 +380,9 @@ const updateItemRequestInPurchase = async (req, res) => {
     }
 
     // check if the request purchase is approved
-    if (requestPurchase.requestStatus === "APPROVED") {
+    if (requestPurchase.requestStatus === "APPROVED" || requestPurchase.requestStatus === "REJECTED") {
       return res.status(400).json({
-        message: "Cannot update the request once it is approved",
+        message: "Cannot update the request once it is approved or rejected",
       });
     }
 
@@ -508,6 +508,156 @@ const deleteRequest = async (req, res) => {
   }
 };
 
+const completeRequestPurchaseItems = async (req, res) => {
+  const { requestCode } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Validate user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
+    });
+
+    if (!user || (user.role !== 'Admin' && user.role !== 'Staff')) {
+      return res.status(403).json({ 
+        message: "Only Admin and Staff can complete request purchase items" 
+      });
+    }
+
+    // Find the request purchase
+    const requestPurchase = await prisma.requestPurchase.findUnique({
+      where: { requestCode },
+      include: { itemRequests: true }
+    });
+
+    if (!requestPurchase) {
+      return res.status(404).json({ 
+        message: "Request Purchase not found" 
+      });
+    }
+
+    // Check if the request purchase is already approved
+    if (requestPurchase.requestStatus !== 'APPROVED') {
+      return res.status(400).json({ 
+        message: "Request Purchase must be approved before completing items" 
+      });
+    }
+
+    if (requestPurchase.requestStatus === 'REJECTED') {
+      return res.status(400).json({ 
+        message: "Request Purchase cannot be completed after rejection" 
+      });
+    }
+
+    // Update all item requests associated with this request code to COMPLETED
+    const updatedItemRequests = await prisma.itemRequest.updateMany({
+      where: { 
+        requestPurchaseId: requestPurchase.id,
+        itemRequestStatus: { not: 'COMPLETED' } // Only update non-completed items
+      },
+      data: { 
+        itemRequestStatus: 'COMPLETED' 
+      }
+    });
+
+    res.status(200).json({
+      message: "Request Purchase items updated to COMPLETED successfully",
+      updatedCount: updatedItemRequests.count
+    });
+  } catch (error) {
+    console.error("Error completing request purchase items:", error);
+    res.status(500).json({ 
+      message: "Error completing request purchase items",
+      error: error.message 
+    });
+  }
+};
+
+const rejectRequestPurchase = async (req, res) => {
+  const { requestCode } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Validate user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
+    });
+
+    if (!user || (user.role !== 'Admin' && user.role !== 'Staff')) {
+      return res.status(403).json({ 
+        message: "Only Admin and Staff can reject request purchases" 
+      });
+    }
+
+    // Find the request purchase
+    const requestPurchase = await prisma.requestPurchase.findUnique({
+      where: { requestCode },
+      include: { 
+        itemRequests: true,
+        purchaseOrders: true,
+        DeliveryOrder: true
+      }
+    });
+
+    if (!requestPurchase) {
+      return res.status(404).json({ 
+        message: "Request Purchase not found" 
+      });
+    }
+
+    // Check if the request purchase is already in a final state
+    if (requestPurchase.requestStatus === 'REJECTED') {
+      return res.status(400).json({ 
+        message: "Request Purchase is already rejected" 
+      });
+    }
+
+    // Check for existing purchase orders or delivery orders
+    if (requestPurchase.purchaseOrders.length > 0 || requestPurchase.DeliveryOrder.length > 0) {
+      return res.status(400).json({ 
+        message: "Cannot reject request purchase with existing purchase orders or delivery orders" 
+      });
+    }
+
+    // Reject the request purchase in a transaction
+    const rejectedRequest = await prisma.$transaction(async (prisma) => {
+      // Update request purchase status to REJECTED
+      const updatedRequestPurchase = await prisma.requestPurchase.update({
+        where: { requestCode },
+        data: { 
+          requestStatus: 'REJECTED' 
+        }
+      });
+
+      // Update all associated item requests to REJECTED status
+      await prisma.itemRequest.updateMany({
+        where: { 
+          requestPurchaseId: updatedRequestPurchase.id,
+          itemRequestStatus: { not: 'COMPLETED' } 
+        },
+        data: { 
+          itemRequestStatus: 'PENDING' // or potentially add a REJECTED status if needed
+        }
+      });
+
+      return updatedRequestPurchase;
+    });
+
+    res.status(200).json({
+      message: "Request Purchase rejected successfully",
+      rejectedRequest
+    });
+  } catch (error) {
+    console.error("Error rejecting request purchase:", error);
+    res.status(500).json({ 
+      message: "Error rejecting request purchase",
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   createRequestPurchase,
   approveRequestPurchase,
@@ -517,4 +667,6 @@ module.exports = {
   getRequestPurchaseById,
   updateItemRequestInPurchase,
   deleteRequest,
+  completeRequestPurchaseItems,
+  rejectRequestPurchase
 };

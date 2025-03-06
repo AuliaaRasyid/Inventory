@@ -36,19 +36,19 @@ router.get(
   getUserSignature
 );
 router.put(
-  "/update-user/:id",
+  "/user/update-user/:id",
   authenticateUser,
   authorizeRoles("Admin", "Staff", "User"),
   updateUserWithSignature
 );
 router.put(
-  "/update-admin/:id",
+  "/user/update-admin/:id",
   authenticateUser,
   authorizeRoles("Admin"),
   updateUser
 );
 router.delete(
-  "/delete/:id",
+  "/user/delete/:id",
   authenticateUser,
   authorizeRoles("Admin"),
   deleteUser

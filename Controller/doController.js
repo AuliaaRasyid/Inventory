@@ -187,10 +187,10 @@ const approveDeliveryOrder = async (req, res) => {
     }
 
     // Check if already completed
-    if (deliveryOrder.status === "COMPLETED") {
+    if (deliveryOrder.status === "COMPLETED" || deliveryOrder.status === "CANCELLED") {
       return res.status(400).json({
         message:
-          "This delivery order is already completed and cannot be approved further",
+          "This delivery order is already completed or cancelled and cannot be approved further",
       });
     }
 
@@ -231,9 +231,22 @@ const approveDeliveryOrder = async (req, res) => {
         where: { id: deliveryOrderId },
         data: { status },
       });
+      
 
       // If final approval, process inventory updates
       if (status === "COMPLETED") {
+        // Update item request status
+        if (deliveryOrder.requestCode) {
+          await prisma.itemRequest.updateMany({
+            where: { 
+              requestPurchaseId: deliveryOrder.requestPurchase.id,
+              itemRequestStatus: { not: 'COMPLETED' } 
+            },
+            data: { 
+              itemRequestStatus: 'ON_DELIVERY' 
+            }
+          });
+        }
         // Final inventory check and update
         for (const item of deliveryOrder.items) {
           // Get the Item entity to get the item ID
@@ -306,6 +319,7 @@ const approveDeliveryOrder = async (req, res) => {
       message,
       data: result,
     });
+
   } catch (error) {
     console.error("Error in delivery order approval:", error);
     res.status(500).json({
@@ -423,9 +437,9 @@ const editDeliveryOrder = async (req, res) => {
     }
 
     // Prevent editing if status is COMPLETED
-    if (existingDO.status === "COMPLETED") {
+    if (existingDO.status === "COMPLETED"|| existingDO.status === "CANCELLED") {
       return res.status(400).json({
-        message: "Cannot edit a completed delivery order",
+        message: "Cannot edit a completed or cancelled delivery order, please delete and create a new one",
       });
     }
 
@@ -620,6 +634,104 @@ const deleteDeliveryOrder = async (req, res) => {
   }
 };
 
+const rejectDeliveryOrder = async (req, res) => {
+  const { deliveryOrderId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // Validate user
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { 
+        role: true,
+        signature: true 
+      }
+    });
+
+    if (!user || (user.role !== 'Admin' && user.role !== 'Staff')) {
+      return res.status(403).json({ 
+        message: "Only Admin and Staff can reject delivery orders" 
+      });
+    }
+
+    // Check if user has a signature
+    if (!user.signature) {
+      return res.status(400).json({
+        message: "You need to have a signature registered to reject delivery orders",
+      });
+    }
+
+    // Find the delivery order
+    const deliveryOrder = await prisma.deliveryOrder.findUnique({
+      where: { id: deliveryOrderId },
+      include: { 
+        items: true,
+        requestPurchase: true,
+        approvals: true
+      }
+    });
+
+    if (!deliveryOrder) {
+      return res.status(404).json({ 
+        message: "Delivery Order not found" 
+      });
+    }
+
+    // Check if already in a final state
+    if (deliveryOrder.status === 'CANCELLED') {
+      return res.status(400).json({
+        message: "Delivery Order is already cancelled",
+      });
+    }
+
+    // Reject the delivery order in a transaction
+    const rejectedDeliveryOrder = await prisma.$transaction(async (prisma) => {
+      // Update delivery order status to CANCELLED
+      const updatedDeliveryOrder = await prisma.deliveryOrder.update({
+        where: { id: deliveryOrderId },
+        data: { 
+          status: 'CANCELLED' 
+        }
+      });
+
+      // If there's an associated request purchase, update item requests
+      if (deliveryOrder.requestPurchase) {
+        await prisma.itemRequest.updateMany({
+          where: { 
+            requestPurchaseId: deliveryOrder.requestPurchase.id,
+            itemRequestStatus: 'ON_DELIVERY'
+          },
+          data: { 
+            itemRequestStatus: 'PENDING' 
+          }
+        });
+      }
+
+      // Create a rejection approval record
+      await prisma.deliveryOrderApproval.create({
+        data: {
+          deliveryOrderId,
+          approvedById: userId,
+          signature: user.signature,
+        }
+      });
+
+      return updatedDeliveryOrder;
+    });
+
+    res.status(200).json({
+      message: "Delivery Order rejected successfully",
+      rejectedDeliveryOrder
+    });
+  } catch (error) {
+    console.error("Error rejecting delivery order:", error);
+    res.status(500).json({ 
+      message: "Error rejecting delivery order",
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   createDeliveryOrder,
   approveDeliveryOrder,
@@ -627,4 +739,5 @@ module.exports = {
   getDeliveryOrderDetails,
   editDeliveryOrder,
   deleteDeliveryOrder,
+  rejectDeliveryOrder
 };
